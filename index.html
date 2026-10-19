@@ -176,13 +176,13 @@ function drawPatternChoices(){
 }
 function updatePatternCount(){const n=patternSelection.size;$('patternCount').textContent=n+'/5 modalidades seleccionadas · '+(n===5?'Listas para confirmar':'Elegí '+(5-n)+' más');$('confirmPatterns').disabled=patternLocked||n!==5;}
 async function loadPatternSettings(id){if(!adminEnabled)return;const key=id;patternLoadKey=key;try{
- const [game,prizes,control]=await Promise.all([sb.from('bingo_games').select('status,max_cards').eq('id',id).single(),sb.from('bingo_prizes').select('pattern').eq('game_id',id),sb.from('bingo_test_game_controls').select('selected_patterns').eq('game_id',id).maybeSingle()]);
- if(game.error)throw game.error;if(prizes.error)throw prizes.error;if(patternLoadKey!==key)return;
- const existing=prizes.data.map(p=>p.pattern);const configured=control.data?.selected_patterns||existing;
- if(configured.length===5)patternSelection=new Set(configured);else patternSelection=new Set(['full_card','horizontal','vertical','diagonal','four_corners']);
- const sold=currentState?.status==='selling'&&Number(currentState?.available_cards)<Number(game.data.max_cards);
- patternLocked=game.data.status!=='selling'||Boolean(sold);
- drawPatternChoices();$('patternStatus').textContent=patternLocked?'🔒 Modalidades bloqueadas: la partida ya comenzó o existen cartones vendidos.':'Elegí exactamente cinco y tocá Confirmar. Los cambios se guardan en el servidor.';
+ const config=await rpc('bingo_test_admin_pattern_settings',{p_game:id});
+ if(patternLoadKey!==key)return;
+ const configured=Array.isArray(config.selected_patterns)?config.selected_patterns:[];
+ patternSelection=new Set(configured.length===5?configured:['full_card','horizontal','vertical','diagonal','four_corners']);
+ patternLocked=Boolean(config.locked);
+ drawPatternChoices();
+ $('patternStatus').textContent=patternLocked?'🔒 Modalidades registradas y bloqueadas: ya existen cartones vendidos o la partida comenzó.':'Elegí exactamente cinco y tocá Confirmar. Los cambios se guardan en el servidor.';
  }catch(e){patternLocked=true;drawPatternChoices();$('patternStatus').textContent='No se pudieron consultar las modalidades: '+e.message;}
 }
 $('confirmPatterns').onclick=async()=>{if(!adminEnabled||patternLocked||patternSelection.size!==5)return;const patterns=['full_card',...patternOptions.filter(x=>patternSelection.has(x))];if(!confirm('¿Confirmás estas cinco modalidades para la partida actual?\n'+patterns.map(x=>names[x]).join(', ')))return;const btn=$('confirmPatterns');btn.disabled=true;try{await rpc('bingo_test_admin_confirm_patterns',{p_game:$('game').value,p_patterns:patterns});$('patternStatus').textContent='✅ Cinco modalidades confirmadas en Supabase TEST.';await refresh();await loadPatternSettings($('game').value)}catch(e){$('patternStatus').textContent='❌ No se guardaron las modalidades: '+e.message;msg('Error al confirmar modalidades: '+e.message,true)}finally{updatePatternCount()}};
